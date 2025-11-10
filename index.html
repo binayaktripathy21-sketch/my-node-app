@@ -106,11 +106,52 @@
 </head>
 <body class="bg-gray-100 min-h-screen antialiased">
 
-    <!-- Loading Container -->
-    <div id="loading-container" class="fixed inset-0 bg-indigo-600 flex flex-col justify-center items-center z-50">
-        <div class="spinner"></div>
-        <h2 id="loading-message" class="text-white text-xl font-semibold mt-6">Syncing your data...</h2>
+<!-- Authentication Container -->
+<div id="auth-container" class="fixed inset-0 bg-gray-100 flex justify-center items-center z-50">
+    <div class="w-full max-w-md bg-white rounded-xl shadow-2xl p-8">
+
+        <!-- Login Form (Default) -->
+        <form id="login-form">
+            <h2 class="text-3xl font-bold text-gray-800 text-center mb-6">Welcome Back!</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="login-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="login-email" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                </div>
+                <div>
+                    <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <input type="password" id="login-password" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700">Log In</button>
+            </div>
+            <p class="text-sm text-center text-gray-600 mt-6">
+                Don't have an account? 
+                <button type="button" id="show-signup" class="font-medium text-indigo-600 hover:text-indigo-500">Sign Up</button>
+            </p>
+        </form>
+
+        <!-- Sign Up Form (Hidden) -->
+        <form id="signup-form" class="hidden">
+            <h2 class="text-3xl font-bold text-gray-800 text-center mb-6">Create Account</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="signup-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="signup-email" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                </div>
+                <div>
+                    <label for="signup-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <input type="password" id="signup-password" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700">Sign Up</button>
+            </div>
+            <p class="text-sm text-center text-gray-600 mt-6">
+                Already have an account? 
+                <button type="button" id="show-login" class="font-medium text-indigo-600 hover:text-indigo-500">Log In</button>
+            </p>
+        </form>
+
     </div>
+</div>
 
     <!-- Main Application Container -->
     <div id="app-container" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 hidden">
@@ -126,11 +167,13 @@
                 <h1 class="text-3xl font-bold text-gray-800">Campus Companion</h1>
             </div>
 
-            <!-- Import/Export Controls (REMOVED) -->
-            <!-- The new "User ID" display -->
-            <div class="bg-white p-3 rounded-lg shadow-md border border-gray-200">
-                <span class="text-xs text-gray-500">Your Secure User ID:</span>
-                <span id="user-id-display" class="text-sm font-medium text-indigo-600">Loading...</span>
+<!-- The new "User ID" display -->
+            <div class="flex items-center space-x-4">
+                <div class="bg-white p-3 rounded-lg shadow-md border border-gray-200">
+                    <span class="text-xs text-gray-500">Logged in as:</span>
+                    <span id="user-id-display" class="text-sm font-medium text-indigo-600">Loading...</span>
+                </div>
+                <button id="logout-btn" class="text-sm font-medium text-red-600 hover:text-red-800">Logout</button>
             </div>
         </header>
 
@@ -650,12 +693,13 @@
     <!-- Firebase SDK Imports -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { 
-            getAuth, 
-            signInAnonymously, 
-            signInWithCustomToken, 
-            onAuthStateChanged 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { 
+    getAuth, 
+    onAuthStateChanged,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
             doc, 
@@ -680,7 +724,7 @@
         measurementId: "G-1L6EE5MKQZ"
 };
 
-        const initialAuthToken = null;
+
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
@@ -786,19 +830,24 @@
                 }
             }
 
-            // === FIREBASE: AUTH & DATA LISTENER ===
+// === FIREBASE: AUTH & DATA LISTENER ===
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    // User is signed in.
-                    userId = user.uid;
-                    console.log("User authenticated: ", userId);
-                    document.getElementById('user-id-display').textContent = userId;
+                    // --- YOU ARE LOGGED IN ---
+                    // 1. A user is found! (e.g., "user_abc@gmail.com")
                     
-                    // Define the single document path for this user
-                    userDocRef = doc(db, 'artifacts', appId, 'users', userId, 'companionData', 'mainDoc');
+                    // 2. Update the header to show their email.
+                    // We query *all* displays, but only the correct one is visible
+                    document.querySelectorAll('#user-id-display').forEach(el => {
+                        el.textContent = user.email;
+                    });
+                    
+                    // 3. Get the path to *their* private data.
+                    userId = user.uid; // Make sure userId is set
+                    userDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'companionData', 'mainDoc');
 
-                    // --- SET UP REAL-TIME LISTENER ---
-                    // This one function handles all data loading and real-time updates
+                    // 4. Set up the listener for their data.
+                    // THIS IS THE FULL, CORRECT CODE
                     onSnapshot(userDocRef, (docSnap) => {
                         console.log("Firestore onSnapshot event triggered.");
                         if (docSnap.exists()) {
@@ -806,7 +855,7 @@
                             console.log("Document exists. Loading data.");
                             appData = { ...defaultData, ...docSnap.data() };
                             
-                            // A quick migration check for old data structures, just in case
+                            // A quick migration check for old data structures
                             if (!appData.academics) appData.academics = defaultData.academics;
                             if (!appData.expenses) appData.expenses = defaultData.expenses;
 
@@ -815,41 +864,94 @@
                             // We will seed their account with the pre-populated demo data.
                             console.log("First-time user. Seeding account with demo data.");
                             appData = { ...seedData }; // Use the demo data
-                            // Save this seed data to Firestore to create the doc
                             saveData(); // This will create the document
                         }
                         
                         // --- APP INITIALIZATION ---
-                        // This now happens *after* we have data.
                         initDOM(); // Set default dates in forms
                         renderAll(); // Render all UI components
                         
-                        // Show the app and hide the loading screen
+                        // --- HIDE AUTH, SHOW APP ---
+                        document.getElementById('auth-container').classList.add('hidden');
                         document.getElementById('app-container').classList.remove('hidden');
-                        document.getElementById('loading-container').classList.add('hidden');
-                        showNotification("Data synced with your account!");
+                        showNotification(`Logged in as ${user.email}`);
 
                     }, (error) => {
                         console.error("Firestore listener error: ", error);
-                        document.getElementById('loading-message').textContent = 'Error loading data. Please reload.';
+                        // Don't show auth container, just show error
+                        showNotification(`Error loading data: ${error.message}`, false);
                     });
-
+                    
                 } else {
-                    // User is signed out. Try to sign in.
-                    console.log("User is signed out. Attempting sign-in...");
-                    try {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                        // onAuthStateChanged will be called again automatically after this
-                    } catch (e) {
-                        console.error("Sign-in error: ", e);
-                        document.getElementById('loading-message').textContent = 'Authentication Failed. Please reload.';
-                    }
+                    // --- YOU ARE LOGGED OUT ---
+                    
+                    // 1. No user is found.
+                    console.log("User is signed out. Showing login screen.");
+
+                    // 3. Hide the main app, and show the login form.
+                    document.getElementById('app-container').classList.add('hidden');
+                    document.getElementById('auth-container').classList.remove('hidden');
                 }
             });
+
+            // === NEW AUTH EVENT LISTENERS ===
+            const loginForm = document.getElementById('login-form');
+            const signupForm = document.getElementById('signup-form');
+            const logoutBtn = document.getElementById('logout-btn');
+
+            const showSignupBtn = document.getElementById('show-signup');
+            const showLoginBtn = document.getElementById('show-login');
+
+            // --- Login ---
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('login-email').value;
+                const password = document.getElementById('login-password').value;
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                    // onAuthStateChanged will handle showing the app
+                } catch (err) {
+                    console.error("Login error: ", err.message);
+                    showNotification(`Login Failed: ${err.message}`, false);
+                }
+            });
+
+            // --- Sign Up ---
+            signupForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('signup-email').value;
+                const password = document.getElementById('signup-password').value;
+                try {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                    // onAuthStateChanged will handle creating the doc and showing the app
+                } catch (err) {
+                    console.error("Sign up error: ", err.message);
+                    showNotification(`Sign Up Failed: ${err.message}`, false);
+                }
+            });
+
+            // --- Logout ---
+            logoutBtn.addEventListener('click', async () => {
+                try {
+                    await signOut(auth);
+                    // onAuthStateChanged will handle showing the login screen
+                } catch (err) {
+                    console.error("Logout error: ", err.message);
+                    showNotification(`Logout Failed: ${err.message}`, false);
+                }
+            });
+
+            // --- Toggle Forms ---
+            showSignupBtn.addEventListener('click', () => {
+                loginForm.classList.add('hidden');
+                signupForm.classList.remove('hidden');
+            });
+
+            showLoginBtn.addEventListener('click', () => {
+                loginForm.classList.remove('hidden');
+                signupForm.classList.add('hidden');
+            });
+
 
 
             // === UTILITY FUNCTIONS ===
@@ -2000,5 +2102,4 @@
     </script>
 
 </body>
-
 </html>

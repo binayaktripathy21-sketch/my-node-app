@@ -1,0 +1,2003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Companion - College Life Manager</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Font: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        /* Base styling */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; /* gray-100 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8; /* gray-400 */
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; /* gray-500 */
+        }
+
+        /* Animation for tab panels */
+        .tab-panel {
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+        }
+
+        /* Hide file input visually but keep it accessible */
+        .sr-only-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+
+        /* Custom notification toast */
+        #notification {
+            transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+        }
+
+        /* Timetable Grid Styles */
+        .timetable-grid {
+            display: grid;
+            grid-template-columns: 60px repeat(6, 1fr); /* Time + 6 days */
+            grid-auto-rows: minmax(50px, auto);
+        }
+        .timetable-cell {
+            @apply p-2 border-b border-r border-gray-200 text-xs;
+        }
+        .timetable-header {
+            @apply timetable-cell bg-gray-100 font-semibold text-gray-700 text-center sticky top-0;
+        }
+        .timetable-time {
+            @apply timetable-header font-medium text-gray-600;
+        }
+        .timetable-slot {
+            @apply timetable-cell bg-white hover:bg-indigo-50 transition-colors;
+        }
+        .timetable-entry {
+            @apply block p-1.5 rounded-md text-center text-white font-semibold;
+        }
+
+        /* Sub-tab navigation */
+        .sub-tab-button {
+            @apply px-4 py-3 font-medium text-sm rounded-lg;
+        }
+        .sub-tab-active {
+            @apply bg-indigo-100 text-indigo-700;
+        }
+        .sub-tab-inactive {
+            @apply text-gray-500 hover:text-gray-700 hover:bg-gray-100;
+        }
+
+        /* Loading Spinner */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen antialiased">
+
+    <!-- Loading Container -->
+    <div id="loading-container" class="fixed inset-0 bg-indigo-600 flex flex-col justify-center items-center z-50">
+        <div class="spinner"></div>
+        <h2 id="loading-message" class="text-white text-xl font-semibold mt-6">Syncing your data...</h2>
+    </div>
+
+    <!-- Main Application Container -->
+    <div id="app-container" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 hidden">
+        
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row justify-between items-center pb-6 border-b border-gray-200 mb-6">
+            <div class="flex items-center space-x-3 mb-4 sm:mb-0">
+                <!-- Icon -->
+                <div class="p-3 bg-indigo-600 rounded-full shadow-lg">
+                    <!-- Icon updated to reflect academics -->
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v11.494M7.753 18.747l8.494-8.494M7.753 6.253l8.494 8.494"></path></svg>
+                </div>
+                <h1 class="text-3xl font-bold text-gray-800">Campus Companion</h1>
+            </div>
+
+            <!-- Import/Export Controls (REMOVED) -->
+            <!-- The new "User ID" display -->
+            <div class="bg-white p-3 rounded-lg shadow-md border border-gray-200">
+                <span class="text-xs text-gray-500">Your Secure User ID:</span>
+                <span id="user-id-display" class="text-sm font-medium text-indigo-600">Loading...</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Tab Navigation -->
+            <nav class="bg-white rounded-lg shadow-md mb-6 overflow-x-auto">
+                <ul class="flex" id="tab-nav">
+                    <li class="flex-1 min-w-[120px]">
+                        <button data-tab="dashboard" class="tab-button w-full flex justify-center items-center space-x-2 p-4 text-sm sm:text-base font-medium border-b-4 border-indigo-600 text-indigo-600">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1V9a1 1 0 011-1h2a1 1 0 011 1v10a1 1 0 001 1h3m-6 0a1 1 0 001-1V9a1 1 0 011-1h2a1 1 0 011 1v10a1 1 0 001 1h3"></path></svg>
+                            <span>Dashboard</span>
+                        </button>
+                    </li>
+                    <!-- NEW: Academics Tab -->
+                    <li class="flex-1 min-w-[120px]">
+                        <button data-tab="academics" class="tab-button w-full flex justify-center items-center space-x-2 p-4 text-sm sm:text-base font-medium border-b-4 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v11.494M7.753 18.747l8.494-8.494M7.753 6.253l8.494 8.494"></path></svg>
+                            <span>Academics</span>
+                        </button>
+                    </li>
+                    <!-- NEW: Expenses Tab -->
+                    <li class="flex-1 min-w-[120px]">
+                        <button data-tab="expenses" class="tab-button w-full flex justify-center items-center space-x-2 p-4 text-sm sm:text-base font-medium border-b-4 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 8h6m-5 0a3 3 0 110 6H9l3 3m-3-6h6m6 1a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span>Expenses</span>
+                        </button>
+                    </li>
+                    <li class="flex-1 min-w-[120px]">
+                        <button data-tab="diary" class="tab-button w-full flex justify-center items-center space-x-2 p-4 text-sm sm:text-base font-medium border-b-4 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v11.494M7.753 18.747l8.494-8.494M7.753 6.253l8.494 8.494"></path></svg>
+                            <span>Diary</span>
+                        </button>
+                    </li>
+                    <li class="flex-1 min-w-[120px]">
+                        <button data-tab="emotions" class="tab-button w-full flex justify-center items-center space-x-2 p-4 text-sm sm:text-base font-medium border-b-4 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span>Emotion Log</span>
+                        </button>
+                    </li>
+                    <li class="flex-1 min-w-[120px]">
+                        <button data-tab="people" class="tab-button w-full flex justify-center items-center space-x-2 p-4 text-sm sm:text-base font-medium border-b-4 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                            <span>People</span>
+                        </button>
+                    </li>
+                    <li class="flex-1 min-w-[120px]">
+                        <button data-tab="conversations" class="tab-button w-full flex justify-center items-center space-x-2 p-4 text-sm sm:text-base font-medium border-b-4 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.54 15.035 3 13.57 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                            <span>Conversations</span>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+
+            <!-- Tab Content Panels -->
+            <div id="tab-content">
+
+                <!-- == Dashboard Panel (REVAMPED) == -->
+                <div id="dashboard-panel" class="tab-panel opacity-100">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Left Column: Widgets -->
+                        <div class="lg:col-span-2 space-y-6">
+                            <!-- Welcome & Data Warning -->
+                            <div class="bg-white rounded-xl shadow-lg p-6 sm:p-8">
+                                <h2 class="text-3xl font-bold text-gray-900 mb-6">Welcome back, Student!</h2>
+                                <!-- UPDATED: Data Sync Message -->
+                                <div class="bg-green-100 border-l-4 border-green-500 text-green-800 p-6 rounded-lg shadow-md" role="alert">
+                                    <div class="flex">
+                                        <div class="py-1">
+                                            <svg class="h-6 w-6 text-green-500 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                        </div>
+                                        <div>
+                                            <p class="font-bold text-lg">Data Synced</p>
+                                            <p class="text-md">Your data is securely saved and synced in real-time to your private account.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- NEW: One-Time Import Button -->
+                                <div class="mt-6">
+                                    <p class="text-sm text-gray-600 mb-2">Have old data from a `.json` file? Import it here to sync it to your cloud account.</p>
+                                    <button id="one-time-import-btn" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-lg hover:bg-blue-700 transition-all duration-300 transform hover:scale-105">
+                                        Import from Old File (.json)
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Today's Classes -->
+                            <div class="bg-white rounded-xl shadow-lg p-6 sm:p-8">
+                                <h3 class="text-2xl font-semibold text-gray-800 mb-4">Today's Classes (Friday)</h3>
+                                <div id="dashboard-timetable" class="space-y-3">
+                                    <!-- Today's classes will be injected here -->
+                                </div>
+                            </div>
+                            
+                            <!-- Upcoming Deadlines -->
+                            <div class="bg-white rounded-xl shadow-lg p-6 sm:p-8">
+                                <h3 class="text-2xl font-semibold text-gray-800 mb-4">Upcoming Deadlines</h3>
+                                <div id="dashboard-assignments" class="space-y-3">
+                                    <!-- Upcoming assignments will be injected here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Stats & Quick Look -->
+                        <div class="lg:col-span-1 space-y-6">
+                            <!-- Quick Stats -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-xl font-semibold text-gray-800 mb-4">At a Glance</h3>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="bg-blue-50 p-4 rounded-xl">
+                                        <div id="stat-diary" class="text-2xl font-bold text-blue-900">0</div>
+                                        <div class="text-sm font-medium text-blue-700">Diary Entries</div>
+                                    </div>
+                                    <div class="bg-green-50 p-4 rounded-xl">
+                                        <div id="stat-emotions" class="text-2xl font-bold text-green-900">0</div>
+                                        <div class="text-sm font-medium text-green-700">Emotions</div>
+                                    </div>
+                                    <div class="bg-purple-50 p-4 rounded-xl">
+                                        <div id="stat-people" class="text-2xl font-bold text-purple-900">0</div>
+                                        <div class="text-sm font-medium text-purple-700">People</div>
+                                    </div>
+                                    <div class="bg-yellow-50 p-4 rounded-xl">
+                                        <div id="stat-convos" class="text-2xl font-bold text-yellow-900">0</div>
+                                        <div class="text-sm font-medium text-yellow-700">Conversations</div>
+                                    </div>
+                                    <div class="bg-teal-50 p-4 rounded-xl">
+                                        <div id="stat-courses" class="text-2xl font-bold text-teal-900">0</div>
+                                        <div class="text-sm font-medium text-teal-700">Courses</div>
+                                    </div>
+                                    <div class="bg-pink-50 p-4 rounded-xl">
+                                        <div id="stat-expenses" class="text-2xl font-bold text-pink-900">₹0</div>
+                                        <div class="text-sm font-medium text-pink-700">Spent (Month)</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Last Emotion -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-xl font-semibold text-gray-800 mb-4">Your Recent Mood</h3>
+                                <div id="dashboard-emotion" class="flex items-center space-x-4">
+                                    <!-- Last emotion will be injected here -->
+                                </div>
+                            </div>
+
+                            <!-- NEW: Generate Day Summary -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-xl font-semibold text-gray-800 mb-4">Generate Day Summary</h3>
+                                <p class="text-sm text-gray-600 mb-3">Select a day to generate a text summary. You can use this as a prompt for an AI.</p>
+                                <div>
+                                    <label for="summary-date" class="block text-sm font-medium text-gray-700 mb-1">Select Date</label>
+                                    <input type="date" id="summary-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm mb-3">
+                                </div>
+                                <button id="generate-summary-btn" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-lg hover:bg-indigo-700 mb-3 transition-all duration-300 transform hover:scale-105">Generate Summary</L>
+                                <textarea id="summary-output" rows="12" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-gray-900" placeholder="Your day summary will appear here..." readonly></textarea>
+                                <button id="copy-summary-btn" class="w-full bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-lg hover:bg-gray-700 mt-2 transition-all duration-300 transform hover:scale-105">Copy to Clipboard</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- == Academics Panel (NEW) == -->
+                <div id="academics-panel" class="tab-panel opacity-0 hidden">
+                    <div class="bg-white rounded-xl shadow-lg p-6 sm:p-8">
+                        <h2 class="text-3xl font-bold text-gray-900 mb-6">Academics Hub</h2>
+                        <!-- Sub-tab navigation -->
+                        <nav class="border-b border-gray-200 mb-6">
+                            <ul id="academics-subnav" class="flex flex-wrap -mb-px space-x-4">
+                                <li><button class="sub-tab-button sub-tab-active" data-subtab="courses">My Courses</button></li>
+                                <li><button class="sub-tab-button sub-tab-inactive" data-subtab="assignments">Assignments</button></li>
+                                <li><button class="sub-tab-button sub-tab-inactive" data-subtab="timetable">Timetable</button></li>
+                            </ul>
+                        </nav>
+
+                        <!-- Sub-tab content -->
+                        <!-- Courses Sub-Panel -->
+                        <div id="academics-courses-panel" class="academics-subpanel">
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <form id="course-form" class="lg:col-span-1 space-y-4 lg:h-fit lg:sticky lg:top-6">
+                                    <h3 class="text-xl font-semibold">Add New Course</h3>
+                                    <div>
+                                        <label for="course-name" class="block text-sm font-medium text-gray-700 mb-1">Course Name</label>
+                                        <input type="text" id="course-name" placeholder="e.g., ECE-201" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                                    </div>
+                                    <div>
+                                        <label for="course-prof" class="block text-sm font-medium text-gray-700 mb-1">Professor</label>
+                                        <input type="text" id="course-prof" placeholder="e.g., Prof. Sharma" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                                    </div>
+                                    <div>
+                                        <label for="course-room" class="block text-sm font-medium text-gray-700 mb-1">Room / Lab</label>
+                                        <input type="text" id="course-room" placeholder="e.g., Room 303" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                                    </div>
+                                    <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700">Add Course</button>
+                                </form>
+                                <div class="lg:col-span-2 space-y-4" id="course-list">
+                                    <!-- Course cards will be injected here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Assignments Sub-Panel -->
+                        <div id="academics-assignments-panel" class="academics-subpanel hidden">
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <form id="assignment-form" class="lg:col-span-1 space-y-4 lg:h-fit lg:sticky lg:top-6">
+                                    <h3 class="text-xl font-semibold">Add New Assignment</h3>
+                                    <div>
+                                        <label for="assignment-title" class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                                        <input type="text" id="assignment-title" placeholder="e.g., Lab Report 3" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                                    </div>
+                                    <div>
+                                        <label for="assignment-course" class="block text-sm font-medium text-gray-700 mb-1">Course</label>
+                                        <select id="assignment-course" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-white" required>
+                                            <option value="">Select Course</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="assignment-due-date" class="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                                        <input type="date" id="assignment-due-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                                    </div>
+                                    <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700">Add Assignment</button>
+                                </form>
+                                <div class="lg:col-span-2 space-y-4" id="assignment-list">
+                                    <!-- Assignment items will be injected here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Timetable Sub-Panel -->
+                        <div id="academics-timetable-panel" class="academics-subpanel hidden">
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <form id="timetable-form" class="lg:col-span-1 space-y-4 lg:h-fit lg:sticky lg:top-6">
+                                    <h3 class="text-xl font-semibold">Add Class to Timetable</h3>
+                                    <div>
+                                        <label for="timetable-course" class="block text-sm font-medium text-gray-700 mb-1">Course</label>
+                                        <select id="timetable-course" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-white" required>
+                                            <option value="">Select Course</option>
+                                        </select>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label for="timetable-day" class="block text-sm font-medium text-gray-700 mb-1">Day</label>
+                                            <select id="timetable-day" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-white" required>
+                                                <option value="mon">Monday</option>
+                                                <option value="tue">Tuesday</option>
+                                                <option value="wed">Wednesday</option>
+                                                <option value="thu">Thursday</option>
+                                                <option value="fri">Friday</option>
+                                                <option value="sat">Saturday</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label for="timetable-time" class="block text-sm font-medium text-gray-700 mb-1">Time</label>
+                                            <select id="timetable-time" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-white" required>
+                                                <option value="9">9:00 - 10:00</option>
+                                                <option value="10">10:00 - 11:00</option>
+                                                <option value="11">11:00 - 12:00</option>
+                                                <option value="12">12:00 - 1:00</option>
+                                                <option value="13">1:00 - 2:00</option>
+                                                <option value="14">2:00 - 3:00</option>
+                                                <option value="15">3:00 - 4:00</option>
+                                                <option value="16">4:00 - 5:00</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700">Add to Timetable</button>
+                                </form>
+                                <div class="lg:col-span-2 space-y-4">
+                                    <h3 class="text-xl font-semibold">Weekly Timetable</h3>
+                                    <div class="timetable-grid overflow-x-auto" id="timetable-visual">
+                                        <!-- Timetable will be injected here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- == Expenses Panel (NEW) == -->
+                <div id="expenses-panel" class="tab-panel opacity-0 hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- New Expense Form -->
+                        <form id="expense-form" class="lg:col-span-1 bg-white rounded-xl shadow-lg p-6 space-y-4 lg:h-fit lg:sticky lg:top-6">
+                            <h2 class="text-2xl font-bold text-gray-900">Add Expense</h2>
+                            <div>
+                                <label for="expense-date" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                                <input type="date" id="expense-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="expense-item" class="block text-sm font-medium text-gray-700 mb-1">Item</label>
+                                    <input type="text" id="expense-item" placeholder="e.g., Samosa" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                                </div>
+                                <div>
+                                    <label for="expense-amount" class="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
+                                    <input type="number" id="expense-amount" placeholder="e.g., 20" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="expense-category" class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                                <select id="expense-category" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-white" required>
+                                    <option>Food</option>
+                                    <option>Stationery</option>
+                                    <option>Travel</option>
+                                    <option>Hostel</option>
+                                    <option>Other</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700">Add Expense</button>
+                        </form>
+                        <!-- Expense List & Chart -->
+                        <div class="lg:col-span-2 space-y-6">
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-xl font-semibold">Monthly Spend by Category</h3>
+                                <div class="max-w-xs mx-auto mt-4">
+                                    <canvas id="expense-chart"></canvas>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-xl font-semibold">This Month's Expenses</h3>
+                                    <p class="text-xl font-bold text-gray-800">Total: <span id="expense-total" class="text-indigo-600">₹0</span></p>
+                                </div>
+                                <div id="expense-list" class="space-y-3 max-h-[400px] overflow-y-auto">
+                                    <!-- Expenses will be injected here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- == Diary Panel == -->
+                <div id="diary-panel" class="tab-panel opacity-0 hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- New Entry Form -->
+                        <form id="diary-form" class="lg:col-span-1 bg-white rounded-xl shadow-lg p-6 space-y-4 lg:h-fit lg:sticky lg:top-6">
+                            <h2 class="text-2xl font-bold text-gray-900">New Diary Entry</h2>
+                            <div>
+                                <label for="diary-date" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                                <input type="date" id="diary-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                            </div>
+                            <div>
+                                <label for="diary-title" class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                                <input type="text" id="diary-title" placeholder="e.g., 'A good day'" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                            </div>
+                            <div>
+                                <label for="diary-mood" class="block text-sm font-medium text-gray-700 mb-1">Mood</label>
+                                <select id="diary-mood" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-white">
+                                    <option>😊 Happy</option>
+                                    <option>😢 Sad</option>
+                                    <option>😐 Neutral</option>
+                                    <option>😬 Stressed</option>
+                                    <option>😡 Angry</option>
+                                    <option>😌 Calm</option>
+                                    <option>🎉 Excited</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="diary-content" class="block text-sm font-medium text-gray-700 mb-1">Thoughts</label>
+                                <textarea id="diary-content" rows="6" placeholder="What's on your mind?" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required></textarea>
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700">Save Entry</button>
+                        </form>
+                        <!-- Entry List -->
+                        <div class="lg:col-span-2 space-y-6">
+                            <div class="flex justify-between items-center">
+                                <h2 class="text-2xl font-bold text-gray-900">Your Entries</h2>
+                                <!-- NEW: Search Bar -->
+                                <input type="search" id="diary-search" placeholder="Search entries..." class="px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                            </div>
+                            <div id="diary-list" class="space-y-6">
+                                <!-- Entries will be dynamically injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- == Emotions Panel == -->
+                <div id="emotions-panel" class="tab-panel opacity-0 hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- New Emotion Form -->
+                        <form id="emotion-form" class="lg:col-span-1 bg-white rounded-xl shadow-lg p-6 space-y-4 lg:h-fit lg:sticky lg:top-6">
+                            <h2 class="text-2xl font-bold text-gray-900">How are you feeling?</h2>
+                            <div>
+                                <label for="emotion-date" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                                <input type="datetime-local" id="emotion-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Select Emotion</label>
+                                <div id="emotion-picker" class="grid grid-cols-4 gap-3">
+                                    <button type="button" class="emotion-btn text-3xl p-3 rounded-lg border-2 border-transparent hover:scale-125 transition-transform" data-emotion="😊 Happy">😊</button>
+                                    <button type="button" class="emotion-btn text-3xl p-3 rounded-lg border-2 border-transparent hover:scale-125 transition-transform" data-emotion="😢 Sad">😢</button>
+                                    <button type="button" class="emotion-btn text-3xl p-3 rounded-lg border-2 border-transparent hover:scale-125 transition-transform" data-emotion="😡 Angry">😡</button>
+                                    <button type="button" class="emotion-btn text-3xl p-3 rounded-lg border-2 border-transparent hover:scale-125 transition-transform" data-emotion="😬 Stressed">😬</button>
+                                    <button type="button" class="emotion-btn text-3xl p-3 rounded-lg border-2 border-transparent hover:scale-125 transition-transform" data-emotion="😌 Calm">😌</button>
+                                    <button type="button" class="emotion-btn text-3xl p-3 rounded-lg border-2 border-transparent hover:scale-125 transition-transform" data-emotion="🎉 Excited">🎉</button>
+                                    <button type="button" class="emotion-btn text-3xl p-3 rounded-lg border-2 border-transparent hover:scale-125 transition-transform" data-emotion="😴 Tired">😴</button>
+                                    <button type="button" class="emotion-btn text-3xl p-3 rounded-lg border-2 border-transparent hover:scale-125 transition-transform" data-emotion="🤔 Thoughtful">🤔</button>
+                                </div>
+                                <input type="hidden" id="emotion-selected" required>
+                            </div>
+                            <div>
+                                <label for="emotion-trigger" class="block text-sm font-medium text-gray-700 mb-1">What's the context or trigger?</label>
+                                <input type="text" id="emotion-trigger" placeholder="e.g., 'Finished my assignment'" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700">Log Emotion</button>
+                        </form>
+                        <!-- Emotion Log List & Chart -->
+                        <div class="lg:col-span-2 space-y-6">
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-xl font-semibold">Mood History (This Month)</h3>
+                                <div class="max-w-full mx-auto mt-4">
+                                    <canvas id="emotion-chart"></canvas>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-xl font-semibold mb-4">Your Emotion Log</h3>
+                                <div id="emotion-list" class="space-y-4 max-h-[500px] overflow-y-auto">
+                                    <!-- Entries will be dynamically injected here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- == People Panel == -->
+                <div id="people-panel" class="tab-panel opacity-0 hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- New Person Form (UPDATED) -->
+                        <form id="people-form" class="lg:col-span-1 bg-white rounded-xl shadow-lg p-6 space-y-4 lg:h-fit lg:sticky lg:top-6">
+                            <h2 class="text-2xl font-bold text-gray-900">Add New Person</h2>
+                            <div>
+                                <label for="person-name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                                <input type="text" id="person-name" placeholder="e.g., 'Prof. Sharma' or 'Ria'" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                            </div>
+                            <div>
+                                <label for="person-emoji" class="block text-sm font-medium text-gray-700 mb-1">Emoji (optional)</label>
+                                <input type="text" id="person-emoji" placeholder="e.g., 😊" maxlength="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                            </div>
+                            <div>
+                                <label for="person-context" class="block text-sm font-medium text-gray-700 mb-1">Context / Relationship</label>
+                                <input type="text" id="person-context" placeholder="e.g., 'Friend', 'Professor', 'Roommate'" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                            </div>
+                            <div>
+                                <label for="person-tags" class="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+                                <input type="text" id="person-tags" placeholder="e.g., project, hostel, ECE-201" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                            </div>
+                            <div>
+                                <label for="person-notes" class="block text-sm font-medium text-gray-700 mb-1">Key Notes</label>
+                                <textarea id="person-notes" rows="4" placeholder="Things to remember..." class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm"></textarea>
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700">Save Person</button>
+                        </form>
+                        <!-- People List -->
+                        <div class="lg:col-span-2 space-y-6">
+                            <h2 class="text-2xl font-bold text-gray-900">Your People</h2>
+                            <div id="people-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <!-- People cards will be dynamically injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- == Conversations Panel == -->
+                <div id="conversations-panel" class="tab-panel opacity-0 hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- New Conversation Form -->
+                        <form id="convo-form" class="lg:col-span-1 bg-white rounded-xl shadow-lg p-6 space-y-4 lg:h-fit lg:sticky lg:top-6">
+                            <h2 class="text-2xl font-bold text-gray-900">Log a Conversation</h2>
+                            <div>
+                                <label for="convo-date" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                                <input type="date" id="convo-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required>
+                            </div>
+                            <div>
+                                <label for="convo-person" class="block text-sm font-medium text-gray-700 mb-1">Who with?</label>
+                                <select id="convo-person" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-white" required>
+                                    <option value="">Select a person</option>
+                                    <!-- People options will be dynamically injected here -->
+                                </select>
+                            </div>
+                            <div>
+                                <label for="convo-summary" class="block text-sm font-medium text-gray-700 mb-1">Summary / Context</label>
+                                <textarea id="convo-summary" rows="4" placeholder="What was the conversation about?" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm" required></textarea>
+                            </div>
+                            <div>
+                                <label for="convo-takeaways" class="block text-sm font-medium text-gray-700 mb-1">Key Takeaways / Action Items</label>
+                                <textarea id="convo-takeaways" rows="3" placeholder="e.g., 'Promised to send notes by Friday'" class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm"></textarea>
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700">Log Conversation</button>
+                        </form>
+                        <!-- Conversation List -->
+                        <div class="lg:col-span-2 space-y-6">
+                            <h2 class="text-2xl font-bold text-gray-900">Your Conversation Log</h2>
+                            <div id="convo-list" class="space-y-4">
+                                <!-- Conversation logs will be dynamically injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification" class="fixed bottom-0 right-0 m-8 p-6 max-w-sm bg-gray-800 text-white rounded-xl shadow-2xl transform translate-x-[200%] opacity-0 z-50">
+        <div class="flex items-center space-x-3">
+            <svg id="notification-icon" class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <p id="notification-message" class="font-medium">Notification text</p>
+        </div>
+    </div>
+
+    <!-- Hidden File Input for Import -->
+    <input type="file" id="importFile" class="sr-only-input" accept=".json">
+
+    <!-- JavaScript Logic -->
+    <!-- Firebase SDK Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            setDoc, 
+            onSnapshot,
+            setLogLevel
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // === FIREBASE & APP STATE SETUP ===
+        let db, auth, userId, userDocRef;
+        
+        // These MUST be provided in the environment
+        const appId = 'my-local-app';
+
+        const firebaseConfig = {
+        apiKey: "AIzaSyDICtBZT3z25NVQvulwF26l4ntuS-_GF0c",
+        authDomain: "campus-companion-a8f9b.firebaseapp.com",
+        projectId: "campus-companion-a8f9b",
+        storageBucket: "campus-companion-a8f9b.firebasestorage.app",
+        messagingSenderId: "1069933739451",
+        appId: "1:1069933739451:web:8bca7fcac6ba9dd6a9d89e",
+        measurementId: "G-1L6EE5MKQZ"
+};
+
+        const initialAuthToken = null;
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+        setLogLevel('debug'); // Enable Firestore logging
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // === STATE MANAGEMENT ===
+            const defaultData = {
+                diary: [],
+                emotions: [],
+                people: [],
+                conversations: [],
+                academics: {
+                    courses: [],
+                    assignments: [],
+                    timetable: {} // e.g., { 'mon_9': 'courseId' }
+                },
+                expenses: []
+            };
+            
+            // This is the pre-populated data from the file.
+            // It will be used to *seed* a new user's account.
+            const seedData = {
+                diary: [
+                    { date: "2025-11-06", title: "Project meeting with Riya", mood: "😐 Neutral", content: "Met at the library to discuss the ECE-201 project. We've divided the work. I'm handling the simulation, she's doing the report. Should be manageable if we start now." },
+                    { date: "2025-11-07", title: "Stressed about internals...", mood: "😬 Stressed", content: "Prof. Sharma announced the dates. Feeling under-prepared for his subject. He's so strict with grading. Need to start studying tonight with Sameer." },
+                    { date: "2025-11-05", title: "Great time at the canteen!", mood: "😊 Happy", content: "Skipped the hostel mess. Went to the canteen with Sameer and Riya. Laughed so much. Ananya was at the next table, she smiled. That made my day!" },
+                    { date: "2025-11-03", title: "Call with Mom", mood: "😢 Sad", content: "Feeling a bit homesick today. Mom called and I miss her food. Hostel life is tough sometimes, but it's also fun. A mixed bag." }
+                ],
+                emotions: [
+                    { date: "2025-11-07T14:30", emotion: "😬 Stressed", trigger: "Internals date sheet is out" },
+                    { date: "2025-11-06T18:00", emotion: "😌 Calm", trigger: "Finished planning the major project" },
+                    { date: "2025-11-05T20:15", emotion: "😊 Happy", trigger: "Hanging out with friends at the canteen" },
+                    { date: "2025-11-05T20:16", emotion: "🎉 Excited", trigger: "Saw Ananya" },
+                    { date: "2025-11-03T21:00", emotion: "😢 Sad", trigger: "Missing home" },
+                    { date: "2025-11-01T10:00", emotion: "😊 Happy", trigger: "Got assignment marks back" }
+                ],
+                people: [
+                    { id: "p_1700000001", name: "Prof. Sharma", context: "ECE-201 Professor", emoji: "👨‍🏫", tags: "ece, internals, strict", notes: "Very strict, knows his subject.\nDoesn't give extensions.\nMy viva is with him next week." },
+                    { id: "p_1700000002", name: "Riya", context: "Friend / Project Partner", emoji: "📚", tags: "project, delhi, ece-201", notes: "From Delhi. In my ECE-201 project group.\nVery organized and smart.\nLikes sitcoms." },
+                    { id: "p_1700000003", name: "Sameer", context: "Hostel Roommate", emoji: "😴", tags: "hostel, programming, maggi", notes: "Bit messy but a great friend.\nAlways up for late-night chai/Maggi.\nGood at programming." },
+                    { id: "p_1700000004", name: "Ananya", context: "Friend (Mech B)", emoji: "📷", tags: "fest, photography", notes: "Met her at the college fest (Aarohan).\nVery nice, seems interested in photography." }
+                ],
+                conversations: [
+                    { date: "2025-11-07", personId: "p_1700000001", summary: "Asked Prof. Sharma about important topics for the internal.", takeaways: "He said 'everything in the first two units is important'. Not very helpful, but at least I tried." },
+                    { date: "2025-11-06", personId: "p_1700000002", summary: "Project planning session.", takeaways: "My task: Complete simulation by next Friday.\nRiya's task: Draft the introduction and methodology." },
+                    { date: "2025-11-05", personId: "p_1700000003", summary: "Late-night Maggi session.", takeaways: "Sameer is also stressed about internals. We decided to make a study schedule together tomorrow." }
+                ],
+                academics: {
+                    courses: [
+                        { id: 'c_1700000001', name: 'ECE-201', prof: 'Prof. Sharma', room: '303', attended: 10, bunked: 2 },
+                        { id: 'c_1700000002', name: 'CS-205', prof: 'Prof. Das', room: 'Lab 5', attended: 8, bunked: 1 },
+                        { id: 'c_1700000003', name: 'MATH-201', prof: 'Prof. Gupta', room: 'A-101', attended: 12, bunked: 0 }
+                    ],
+                    assignments: [
+                        { id: 'a_1700000001', title: 'ECE-201 Lab Report 3', courseId: 'c_1700000001', dueDate: '2025-11-10', done: false },
+                        { id: 'a_1700000002', title: 'CS-205 Project Phase 1', courseId: 'c_1700000002', dueDate: '2025-11-15', done: false },
+                        { id: 'a_1700000003', title: 'MATH-201 Problem Set 5', courseId: 'c_1700000003', dueDate: '2025-11-08', done: false },
+                        { id: 'a_1700000004', title: 'ECE-201 Quiz 2', courseId: 'c_1700000001', dueDate: '2025-11-06', done: true }
+                    ],
+                    timetable: {
+                        'mon_10': 'c_1700000001', 'mon_11': 'c_1700000003',
+                        'tue_9': 'c_1700000002', 'tue_10': 'c_1700000002', 'tue_14': 'c_1700000003',
+                        'wed_14': 'c_1700000001',
+                        'thu_11': 'c_1700000003', 'thu_15': 'c_1700000002', 'thu_16': 'c_1700000002',
+                        'fri_10': 'c_1700000001', 'fri_14': 'c_1700000001',
+                        'sat_9': 'c_1700000003'
+                    }
+                },
+                expenses: [
+                    { id: 'e_1700000001', date: '2025-11-07', item: 'Photocopy Notes', amount: 30, category: 'Stationery' },
+                    { id: 'e_1700000002', date: '2025-11-07', item: 'Canteen (Samosa)', amount: 20, category: 'Food' },
+                    { id: 'e_1700000003', date: '2025-11-06', item: 'Auto to market', amount: 50, category: 'Travel' },
+                    { id: 'e_1700000004', date: '2025-11-05', item: 'Canteen (Friends)', amount: 150, category: 'Food' },
+                    { id: 'e_1700000005', date: '2025-11-04', item: 'New Notebooks', amount: 120, category: 'Stationery' },
+                    { id: 'e_1700000006', date: "2025-11-03", item: 'Hostel Mess Dues', amount: 3000, category: 'Hostel' }
+                ]
+            };
+            
+            // This holds the current state of the app
+            let appData = { ...defaultData };
+            
+            // === CHART.JS INSTANCES ===
+            let emotionChartInstance = null;
+            let expenseChartInstance = null;
+
+            // === FIREBASE: SAVE FUNCTION ===
+            async function saveData() {
+                if (!userDocRef) {
+                    console.warn("User document not ready. Cannot save.");
+                    return;
+                }
+                try {
+                    // Overwrite the document with the current appData state
+                    await setDoc(userDocRef, appData);
+                    // No notification on save, it's too noisy.
+                } catch (e) {
+                    console.error("Error saving data to Firestore: ", e);
+                    showNotification("Error syncing data.", false);
+                }
+            }
+
+            // === FIREBASE: AUTH & DATA LISTENER ===
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    // User is signed in.
+                    userId = user.uid;
+                    console.log("User authenticated: ", userId);
+                    document.getElementById('user-id-display').textContent = userId;
+                    
+                    // Define the single document path for this user
+                    userDocRef = doc(db, 'artifacts', appId, 'users', userId, 'companionData', 'mainDoc');
+
+                    // --- SET UP REAL-TIME LISTENER ---
+                    // This one function handles all data loading and real-time updates
+                    onSnapshot(userDocRef, (docSnap) => {
+                        console.log("Firestore onSnapshot event triggered.");
+                        if (docSnap.exists()) {
+                            // Document exists, load its data
+                            console.log("Document exists. Loading data.");
+                            appData = { ...defaultData, ...docSnap.data() };
+                            
+                            // A quick migration check for old data structures, just in case
+                            if (!appData.academics) appData.academics = defaultData.academics;
+                            if (!appData.expenses) appData.expenses = defaultData.expenses;
+
+                        } else {
+                            // Document doesn't exist. This is a first-time login.
+                            // We will seed their account with the pre-populated demo data.
+                            console.log("First-time user. Seeding account with demo data.");
+                            appData = { ...seedData }; // Use the demo data
+                            // Save this seed data to Firestore to create the doc
+                            saveData(); // This will create the document
+                        }
+                        
+                        // --- APP INITIALIZATION ---
+                        // This now happens *after* we have data.
+                        initDOM(); // Set default dates in forms
+                        renderAll(); // Render all UI components
+                        
+                        // Show the app and hide the loading screen
+                        document.getElementById('app-container').classList.remove('hidden');
+                        document.getElementById('loading-container').classList.add('hidden');
+                        showNotification("Data synced with your account!");
+
+                    }, (error) => {
+                        console.error("Firestore listener error: ", error);
+                        document.getElementById('loading-message').textContent = 'Error loading data. Please reload.';
+                    });
+
+                } else {
+                    // User is signed out. Try to sign in.
+                    console.log("User is signed out. Attempting sign-in...");
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                        // onAuthStateChanged will be called again automatically after this
+                    } catch (e) {
+                        console.error("Sign-in error: ", e);
+                        document.getElementById('loading-message').textContent = 'Authentication Failed. Please reload.';
+                    }
+                }
+            });
+
+
+            // === UTILITY FUNCTIONS ===
+            function getTodayDate() { return new Date().toISOString().split('T')[0]; }
+            function getNowDateTimeLocal() {
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                return now.toISOString().slice(0, 16);
+            }
+
+            let notificationTimeout;
+            function showNotification(message, success = true) {
+                const notification = document.getElementById('notification');
+                const messageEl = document.getElementById('notification-message');
+                const iconEl = document.getElementById('notification-icon');
+                messageEl.textContent = message;
+
+                if (notificationTimeout) clearTimeout(notificationTimeout);
+
+                if (success) {
+                    notification.classList.remove('bg-red-600');
+                    notification.classList.add('bg-gray-800');
+                    iconEl.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>`;
+                    iconEl.classList.remove('text-yellow-400');
+                    iconEl.classList.add('text-green-400');
+                } else {
+                    notification.classList.remove('bg-gray-800');
+                    notification.classList.add('bg-red-600');
+                    iconEl.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>`;
+                    iconEl.classList.remove('text-green-400');
+                    iconEl.classList.add('text-yellow-400');
+                }
+
+                notification.classList.remove('translate-x-[200%]', 'opacity-0');
+                notification.classList.add('translate-x-0', 'opacity-100');
+
+                notificationTimeout = setTimeout(() => {
+                    notification.classList.remove('translate-x-0', 'opacity-100');
+                    notification.classList.add('translate-x-[200%]', 'opacity-0');
+                }, 3000);
+            }
+
+            // Get course by ID
+            function getCourse(courseId) {
+                return appData.academics.courses.find(c => c.id === courseId);
+            }
+
+            // === NEW SUMMARY GENERATOR ===
+            const generateSummaryBtn = document.getElementById('generate-summary-btn');
+            const copySummaryBtn = document.getElementById('copy-summary-btn');
+            const summaryDateInput = document.getElementById('summary-date');
+            const summaryOutput = document.getElementById('summary-output');
+
+            function formatDateForSummary(dateString) {
+                // e.g., "Saturday, November 8, 2025"
+                const date = new Date(dateString + 'T12:00:00'); // Use T12 to avoid timezone issues
+                return date.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            }
+
+            function getDayKey(dateString) {
+                const date = new Date(dateString + 'T12:00:00');
+                const dayMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+                return dayMap[date.getDay()];
+            }
+
+            generateSummaryBtn.addEventListener('click', () => {
+                const selectedDate = summaryDateInput.value;
+                if (!selectedDate) {
+                    showNotification('Please select a date first.', false);
+                    return;
+                }
+
+                let promptText = [];
+                const formattedDate = formatDateForSummary(selectedDate);
+                const dayKey = getDayKey(selectedDate);
+
+                promptText.push(`AI Prompt: Please write a brief, narrative summary of my day (${formattedDate}).`);
+                promptText.push(`\nHere is all the raw data I logged for that day:\n`);
+
+                // 1. Diary
+                const diaryEntry = appData.diary.find(d => d.date === selectedDate);
+                if (diaryEntry) {
+                    promptText.push(`My Diary Entry:`);
+                    promptText.push(`- Title: ${diaryEntry.title}`);
+                    promptText.push(`- My Mood: ${diaryEntry.mood}`);
+                    promptText.push(`- My Thoughts: "${diaryEntry.content.replace(/\n/g, ' ')}"`);
+                } else {
+                    promptText.push(`My Diary Entry:`);
+                    promptText.push(`- No diary entry was logged for this day.`);
+                }
+
+                // 2. Emotions
+                const emotions = appData.emotions.filter(e => e.date.startsWith(selectedDate));
+                if (emotions.length > 0) {
+                    promptText.push(`\nMy Emotions Logged:`);
+                    emotions.forEach(e => {
+                        const time = new Date(e.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                        promptText.push(`- ${time}: Felt ${e.emotion.split(' ')[1]} (Trigger: "${e.trigger}")`);
+                    });
+                }
+
+                // 3. Classes
+                const classes = [];
+                for (let hour = 9; hour <= 16; hour++) {
+                    const slotKey = `${dayKey}_${hour}`;
+                    const courseId = appData.academics.timetable[slotKey];
+                    if (courseId) {
+                        const course = getCourse(courseId);
+                        if (course) {
+                            classes.push(`- ${hour}:00: ${course.name} (${course.prof})`);
+                        }
+                    }
+                }
+                if (classes.length > 0) {
+                    promptText.push(`\nClasses Scheduled:`);
+                    promptText.push(classes.join('\n'));
+                }
+
+                // 4. Assignments Due
+                const assignmentsDue = appData.academics.assignments.filter(a => a.dueDate === selectedDate);
+                if (assignmentsDue.length > 0) {
+                    promptText.push(`\nAssignments Due Today:`);
+                    assignmentsDue.forEach(a => {
+                        promptText.push(`- ${a.title} (for ${getCourse(a.courseId)?.name || '...'})`);
+                    });
+                }
+
+                // 5. Conversations
+                const convos = appData.conversations.filter(c => c.date === selectedDate);
+                if (convos.length > 0) {
+                    promptText.push(`\nConversations Logged:`);
+                    convos.forEach(c => {
+                        const person = appData.people.find(p => p.id === c.personId);
+                        promptText.push(`- With ${person ? person.name : 'Deleted Person'}: ${c.summary.replace(/\n/g, ' ')}`);
+                    });
+                }
+
+                // 6. Expenses
+                const expenses = appData.expenses.filter(e => e.date === selectedDate);
+                if (expenses.length > 0) {
+                    promptText.push(`\nExpenses Logged:`);
+                    expenses.forEach(e => {
+                        promptText.push(`- Spent ₹${e.amount} on "${e.item}" (Category: ${e.category})`);
+                    });
+                }
+                
+                if (diaryEntry || emotions.length > 0 || classes.length > 0 || assignmentsDue.length > 0 || convos.length > 0 || expenses.length > 0) {
+                     promptText.push(`\nEnd of data. Please provide the summary.`);
+                } else {
+                    promptText = [`No data of any kind was logged for ${formattedDate}.`];
+                }
+
+                summaryOutput.value = promptText.join('\n');
+            });
+
+            copySummaryBtn.addEventListener('click', () => {
+                if (summaryOutput.value.length === 0) {
+                    showNotification('Nothing to copy!', false);
+                    return;
+                }
+                
+                // Use the 'execCommand' method for broader compatibility in iFrames
+                summaryOutput.select();
+                summaryOutput.setSelectionRange(0, 99999); // For mobile
+                
+                try {
+                    document.execCommand('copy');
+                    showNotification('Summary prompt copied to clipboard!');
+                } catch (err) {
+                    console.error('Copy failed:', err);
+                    showNotification('Failed to copy text.', false);
+                }
+
+                // Deselect the text
+                window.getSelection().removeAllRanges();
+            });
+
+
+            // === TAB NAVIGATION ===
+            const tabNav = document.getElementById('tab-nav');
+            const tabContent = document.getElementById('tab-content');
+            tabNav.addEventListener('click', (e) => {
+                const clickedButton = e.target.closest('.tab-button');
+                if (!clickedButton) return;
+                const targetTab = clickedButton.dataset.tab;
+
+                tabNav.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.toggle('border-indigo-600', btn === clickedButton);
+                    btn.classList.toggle('text-indigo-600', btn === clickedButton);
+                    btn.classList.toggle('border-transparent', btn !== clickedButton);
+                    btn.classList.toggle('text-gray-500', btn !== clickedButton);
+                });
+                tabContent.querySelectorAll('.tab-panel').forEach(panel => {
+                    panel.classList.toggle('hidden', panel.id !== `${targetTab}-panel`);
+                    panel.classList.toggle('opacity-0', panel.id !== `${targetTab}-panel`);
+                    panel.classList.toggle('opacity-100', panel.id === `${targetTab}-panel`);
+                });
+            });
+
+            // === ACADEMICS SUB-TAB NAVIGATION ===
+            const academicsSubNav = document.getElementById('academics-subnav');
+            if (academicsSubNav) { 
+                academicsSubNav.addEventListener('click', (e) => {
+                    const clickedButton = e.target.closest('.sub-tab-button');
+                    if (!clickedButton) return;
+                    const targetTab = clickedButton.dataset.subtab;
+
+                    academicsSubNav.querySelectorAll('.sub-tab-button').forEach(btn => {
+                        btn.classList.toggle('sub-tab-active', btn === clickedButton);
+                        btn.classList.toggle('sub-tab-inactive', btn !== clickedButton);
+                    });
+                    document.querySelectorAll('.academics-subpanel').forEach(panel => {
+                        panel.classList.toggle('hidden', panel.id !== `academics-${targetTab}-panel`);
+                    });
+                });
+            }
+
+            // === IMPORT / EXPORT (REMOVED / RE-ADDED) ===
+            const importFileInput = document.getElementById('importFile');
+            const oneTimeImportBtn = document.getElementById('one-time-import-btn');
+
+            oneTimeImportBtn.addEventListener('click', () => {
+                importFileInput.click();
+            });
+
+            importFileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        let importedData = JSON.parse(e.target.result);
+                        
+                        // --- Migration logic ---
+                        if (!importedData.academics) importedData.academics = defaultData.academics;
+                        if (!importedData.expenses) importedData.expenses = defaultData.expenses;
+                        if (importedData.people.length > 0 && importedData.people[0].emoji === undefined) {
+                            importedData.people.forEach(p => { p.emoji = '👤'; p.tags = ''; });
+                        }
+                        
+                        // Set as current data and SAVE to cloud
+                        appData = { ...defaultData, ...importedData };
+                        await saveData(); 
+                        
+                        // The onSnapshot listener will automatically detect this change
+                        // and re-render the entire app with the new data.
+                        showNotification('Import successful! Your old data is now saved to the cloud.');
+                        
+                        // Hide the button after successful import
+                        oneTimeImportBtn.classList.add('hidden');
+
+                    } catch (err) {
+                        console.error('Import error:', err);
+                        showNotification('Error: Invalid or corrupted data file.', false);
+                    }
+                    event.target.value = null; // Clear input
+                };
+                reader.readAsText(file);
+            });
+
+
+            // === RENDER FUNCTIONS ===
+            function renderAll() {
+                // Order matters for dependencies
+                renderAcademicsCourses(); // Needs to be first for other modules
+                renderAcademicsAssignments();
+                renderAcademicsTimetable();
+                
+                renderDiary();
+                renderEmotions();
+                renderEmotionChart(); // Depends on renderEmotions
+                
+                renderPeople();
+                updatePeopleDropdown(); // Depends on renderPeople
+                
+                renderConversations();
+                
+                renderExpenses();
+                renderExpenseChart(); // Depends on renderExpenses
+                
+                renderDashboard(); // Depends on all other data
+                updateDashboardStats();
+            }
+
+            // --- Dashboard ---
+            function renderDashboard() {
+                // 1. Today's Timetable
+                const timetableEl = document.getElementById('dashboard-timetable');
+                const today = new Date();
+                const dayMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+                const todayKey = dayMap[today.getDay()];
+                const todayName = today.toLocaleDateString('en-IN', { weekday: 'long' });
+                
+                document.querySelector('#dashboard-timetable').previousElementSibling.textContent = `Today's Classes (${todayName})`;
+
+                const todayClasses = [];
+                for (let hour = 9; hour <= 16; hour++) {
+                    const slotKey = `${todayKey}_${hour}`;
+                    if (appData.academics.timetable[slotKey]) {
+                        const course = getCourse(appData.academics.timetable[slotKey]);
+                        if(course) {
+                            todayClasses.push({ time: `${hour}:00`, course });
+                        }
+                    }
+                }
+
+                if (todayClasses.length === 0) {
+                    timetableEl.innerHTML = `<p class="text-gray-500">No classes scheduled for today. Enjoy your day!</p>`;
+                } else {
+                    timetableEl.innerHTML = todayClasses.map(c => `
+                        <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                            <span class="font-semibold text-indigo-600 w-12">${c.time.split(':')[0]}:00</span>
+                            <div class="flex-1">
+                                <p class="font-bold text-gray-800">${c.course.name}</p>
+                                <p class="text-sm text-gray-500">${c.course.prof} | ${c.course.room}</p>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                // 2. Upcoming Assignments
+                const assignmentsEl = document.getElementById('dashboard-assignments');
+                const upcoming = appData.academics.assignments
+                    .filter(a => !a.done)
+                    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+                    .slice(0, 3); // Get top 3
+
+                if (upcoming.length === 0) {
+                    assignmentsEl.innerHTML = `<p class="text-gray-500">No upcoming deadlines. You're all caught up!</p>`;
+                } else {
+                    assignmentsEl.innerHTML = upcoming.map(a => {
+                        const course = getCourse(a.courseId);
+                        const dueDate = new Date(a.dueDate + 'T00:00'); // Fix off-by-one date issue
+                        const now = new Date();
+                        now.setHours(0,0,0,0); // Set to start of today for accurate diff
+                        const daysLeft = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+                        const dueText = daysLeft < 0 ? 'Overdue' : (daysLeft === 0 ? 'Due Today' : `${daysLeft} days left`);
+                        return `
+                        <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                            <span class="font-semibold ${daysLeft <= 1 ? 'text-red-600' : 'text-gray-600'} w-24 text-right">${dueText}</span>
+                            <div class="flex-1">
+                                <p class="font-bold text-gray-800">${a.title}</p>
+                                <p class="text-sm text-gray-500">${course ? course.name : 'Unknown Course'}</p>
+                            </div>
+                        </div>
+                    `}).join('');
+                }
+                
+                // 3. Last Emotion
+                const emotionEl = document.getElementById('dashboard-emotion');
+                if (appData.emotions.length > 0) {
+                    const lastEmotion = [...appData.emotions].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                    emotionEl.innerHTML = `
+                        <span class="text-5xl">${lastEmotion.emotion.split(' ')[0]}</span>
+                        <div>
+                            <p class="font-semibold text-xl text-gray-800">${lastEmotion.emotion.split(' ')[1]}</p>
+                            <p class="text-gray-600">"${lastEmotion.trigger}"</p>
+                        </div>
+                    `;
+                } else {
+                    emotionEl.innerHTML = `<p class="text-gray-500">No emotions logged yet.</p>`;
+                }
+            }
+
+            function updateDashboardStats() {
+                document.getElementById('stat-diary').textContent = appData.diary.length;
+                document.getElementById('stat-emotions').textContent = appData.emotions.length;
+                document.getElementById('stat-people').textContent = appData.people.length;
+                document.getElementById('stat-convos').textContent = appData.conversations.length;
+                document.getElementById('stat-courses').textContent = appData.academics.courses.length;
+                
+                // Monthly expense
+                const now = new Date();
+                const currentMonth = now.getMonth();
+                const currentYear = now.getFullYear();
+                const monthlyTotal = appData.expenses
+                    .filter(e => {
+                        const eDate = new Date(e.date);
+                        return eDate.getMonth() === currentMonth && eDate.getFullYear() === currentYear;
+                    })
+                    .reduce((total, e) => total + e.amount, 0);
+                document.getElementById('stat-expenses').textContent = `₹${monthlyTotal}`;
+            }
+
+            // --- Academics ---
+            const courseList = document.getElementById('course-list');
+            const assignmentCourseSelect = document.getElementById('assignment-course');
+            const timetableCourseSelect = document.getElementById('timetable-course');
+            
+            function renderAcademicsCourses() {
+                if (!courseList || !assignmentCourseSelect || !timetableCourseSelect) return; 
+                
+                courseList.innerHTML = '';
+                assignmentCourseSelect.innerHTML = '<option value="">Select Course</option>';
+                timetableCourseSelect.innerHTML = '<option value="">Select Course</option>';
+
+                if (appData.academics.courses.length === 0) {
+                    courseList.innerHTML = '<p class="text-gray-500">No courses added yet.</p>';
+                }
+
+                appData.academics.courses.forEach(course => {
+                    const totalClasses = course.attended + course.bunked;
+                    const percentage = totalClasses === 0 ? 100 : Math.round((course.attended / totalClasses) * 100);
+                    const percentColor = percentage >= 75 ? 'text-green-600' : 'text-red-600';
+
+                    courseList.innerHTML += `
+                        <div class="bg-gray-50 rounded-lg p-4 shadow-sm">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h4 class="text-lg font-bold text-indigo-700">${course.name}</h4>
+                                    <p class="text-sm text-gray-600">${course.prof} | ${course.room}</p>
+                                </div>
+                                <button class="delete-course-btn text-red-400 hover:text-red-600" data-id="${course.id}">&times;</button>
+                            </div>
+                            <div class="flex items-center justify-between mt-3">
+                                <div class="flex-1">
+                                    <p class="font-semibold text-xl ${percentColor}">${percentage}%</p>
+                                    <p class="text-xs text-gray-500">(${course.attended} attended / ${course.bunked} bunked)</p>
+                                </div>
+                                <div class="flex space-x-2">
+                                    <button class="attend-btn bg-green-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-600" data-id="${course.id}">+ Attend</button>
+                                    <button class="bunk-btn bg-yellow-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-yellow-600" data-id="${course.id}">+ Bunk</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    // Populate dropdowns
+                    assignmentCourseSelect.innerHTML += `<option value="${course.id}">${course.name}</option>`;
+                    timetableCourseSelect.innerHTML += `<option value="${course.id}">${course.name}</option>`;
+                });
+            }
+
+            const assignmentList = document.getElementById('assignment-list');
+            function renderAcademicsAssignments() {
+                if (!assignmentList) return; 
+
+                const sorted = [...appData.academics.assignments]
+                    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+                    .sort((a, b) => a.done - b.done); // Show pending first
+
+                if (sorted.length === 0) {
+                    assignmentList.innerHTML = '<p class="text-gray-500">No assignments added yet.</p>';
+                    return;
+                }
+
+                assignmentList.innerHTML = sorted.map(a => {
+                    const course = getCourse(a.courseId);
+                    const dueDate = new Date(a.dueDate + 'T00:00'); // Fix off-by-one date issue
+                    const now = new Date();
+                    now.setHours(0,0,0,0); // Set to start of today for accurate diff
+                    const daysLeft = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+                    const dueText = a.done ? 'Done' : (daysLeft < 0 ? 'Overdue' : (daysLeft === 0 ? 'Due Today' : `${daysLeft} days left`));
+                    const dueColor = a.done ? 'text-green-600' : (daysLeft <= 1 ? 'text-red-600' : 'text-gray-600');
+                    return `
+                        <div class="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
+                            <input type="checkbox" class="assignment-done-btn w-5 h-5" data-id="${a.id}" ${a.done ? 'checked' : ''}>
+                            <div class="flex-1">
+                                <p class="font-semibold ${a.done ? 'line-through text-gray-500' : 'text-gray-800'}">${a.title}</p>
+                                <p class="text-sm ${a.done ? 'text-gray-400' : 'text-gray-500'}">${course ? course.name : 'Unknown'} | ${dueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+                            </div>
+                            <span class="font-medium text-sm ${dueColor}">${dueText}</span>
+                            <button class="delete-assignment-btn text-red-400 hover:text-red-600" data-id="${a.id}">&times;</button>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            const timetableVisual = document.getElementById('timetable-visual');
+            function renderAcademicsTimetable() {
+                if (!timetableVisual) return; 
+
+                const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+                const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const times = ['9', '10', '11', '12', '13', '14', '15', '16'];
+                const timeNames = ['9-10', '10-11', '11-12', '12-1', '1-2', '2-3', '3-4', '4-5'];
+                
+                let html = '<div class="timetable-header"></div>'; // Empty corner
+                dayNames.forEach(day => html += `<div class="timetable-header">${day}</div>`);
+                
+                times.forEach((time, i) => {
+                    html += `<div class="timetable-time">${timeNames[i]}</div>`; // Time slot header
+                    days.forEach(day => {
+                        const slotKey = `${day}_${time}`;
+                        const courseId = appData.academics.timetable[slotKey];
+                        if (courseId) {
+                            const course = getCourse(courseId);
+                            const courseIndex = appData.academics.courses.findIndex(c => c.id === courseId);
+                            const colors = ['bg-indigo-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-yellow-600', 'bg-teal-500'];
+                            const color = colors[courseIndex % colors.length];
+                            html += `
+                                <div class="timetable-slot p-1">
+                                    <span class="timetable-entry ${color}">
+                                        ${course ? course.name : 'ERR'}
+                                        <button class="delete-timetable-btn float-right opacity-50 hover:opacity-100" data-key="${slotKey}">&times;</button>
+                                    </span>
+                                </div>`;
+                        } else {
+                            html += `<div class="timetable-slot"></div>`; // Empty slot
+                        }
+                    });
+                });
+                timetableVisual.innerHTML = html;
+            }
+
+            // --- Expenses ---
+            const expenseList = document.getElementById('expense-list');
+            const expenseTotalEl = document.getElementById('expense-total');
+            function renderExpenses() {
+                if (!expenseList || !expenseTotalEl) return; 
+
+                const now = new Date();
+                const currentMonth = now.getMonth();
+                const currentYear = now.getFullYear();
+
+                const monthlyExpenses = appData.expenses.filter(e => {
+                        const eDate = new Date(e.date + 'T00:00'); // Fix off-by-one
+                        return eDate.getMonth() === currentMonth && eDate.getFullYear() === currentYear;
+                    })
+                    .sort((a, b) => new Date(b.date) - new Date(a.date));
+                
+                const total = monthlyExpenses.reduce((sum, e) => sum + e.amount, 0);
+                expenseTotalEl.textContent = `₹${total}`;
+
+                if (monthlyExpenses.length === 0) {
+                    expenseList.innerHTML = '<p class="text-gray-500">No expenses logged this month.</p>';
+                    return;
+                }
+                
+                expenseList.innerHTML = monthlyExpenses.map(e => `
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                            <p class="font-semibold text-gray-800">${e.item}</p>
+                            <p class="text-sm text-gray-500">${new Date(e.date + 'T00:00').toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})} | ${e.category}</p>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="font-semibold text-gray-700">₹${e.amount}</span>
+                            <button class="delete-expense-btn text-red-400 hover:text-red-600" data-id="${e.id}">&times;</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            function renderExpenseChart() {
+                const ctxEl = document.getElementById('expense-chart'); 
+                if (!ctxEl) return; 
+                const ctx = ctxEl.getContext('2d');
+                
+                const now = new Date();
+                const currentMonth = now.getMonth();
+                const currentYear = now.getFullYear();
+
+                const monthlyExpenses = appData.expenses.filter(e => {
+                    const eDate = new Date(e.date + 'T00:00'); // Fix off-by-one
+                    return eDate.getMonth() === currentMonth && eDate.getFullYear() === currentYear;
+                });
+                
+                const categoryData = monthlyExpenses.reduce((acc, e) => {
+                    acc[e.category] = (acc[e.category] || 0) + e.amount;
+                    return acc;
+                }, {});
+
+                const labels = Object.keys(categoryData);
+                const data = Object.values(categoryData);
+
+                if (expenseChartInstance) {
+                    expenseChartInstance.destroy();
+                }
+
+                if (labels.length === 0) {
+                    // No data, don't render chart
+                    return;
+                }
+
+                expenseChartInstance = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6'],
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                            }
+                        }
+                    }
+                });
+            }
+
+            // --- Diary (Updated) ---
+            const diaryList = document.getElementById('diary-list');
+            const diarySearch = document.getElementById('diary-search');
+            function renderDiary(searchTerm = '') {
+                searchTerm = searchTerm.toLowerCase();
+                const filtered = appData.diary.filter(entry => 
+                    entry.title.toLowerCase().includes(searchTerm) || 
+                    entry.content.toLowerCase().includes(searchTerm)
+                );
+                
+                filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                if (filtered.length === 0) {
+                    diaryList.innerHTML = `<p class="text-gray-500 text-center py-10">No entries ${searchTerm ? 'match your search' : 'yet'}.</p>`;
+                    return;
+                }
+                
+                diaryList.innerHTML = filtered.map(entry => {
+                    return `
+                        <div class="bg-white rounded-xl shadow-lg p-6 transition-all duration-300 transform hover:shadow-xl hover:-translate-y-1">
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-900">${entry.title}</h3>
+                                    <p class="text-sm text-gray-500">${new Date(entry.date + 'T00:00').toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                </div>
+                                <span class="text-2xl">${entry.mood.split(' ')[0]}</span>
+                            </div>
+                            <p class="text-gray-700 whitespace-pre-wrap">${entry.content}</p>
+                            <button class="delete-diary-btn text-sm text-red-500 hover:text-red-700 mt-4" data-date="${entry.date}" data-title="${entry.title}">Delete</button>
+                        </div>
+                    `
+                }).join('');
+            }
+
+            // --- Emotions (Updated) ---
+            const emotionList = document.getElementById('emotion-list');
+            function renderEmotions() {
+                appData.emotions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                if (appData.emotions.length === 0) {
+                    emotionList.innerHTML = '<p class="text-gray-500 text-center py-10">Your emotion log is empty.</p>';
+                    return;
+                }
+
+                emotionList.innerHTML = appData.emotions.map((entry) => `
+                    <div class="bg-white rounded-xl shadow-md p-4 flex items-center space-x-4">
+                        <span class="text-4xl">${entry.emotion.split(' ')[0]}</span>
+                        <div class="flex-1">
+                            <p class="font-semibold text-gray-800">${entry.emotion.split(' ')[1]}</p>
+                            <p class="text-sm text-gray-600">${entry.trigger}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-gray-500">${new Date(entry.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+                            <p class="text-xs text-gray-500">${new Date(entry.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                        <button class="delete-emotion-btn text-red-400 hover:text-red-600" data-date="${entry.date}">&times;</button>
+                    </div>
+                `).join('');
+            }
+            
+            function renderEmotionChart() {
+                const ctxEl = document.getElementById('emotion-chart'); 
+                if (!ctxEl) return; 
+                const ctx = ctxEl.getContext('2d');
+                
+                const now = new Date();
+                const currentMonth = now.getMonth();
+                const currentYear = now.getFullYear();
+
+                const monthlyEmotions = appData.emotions.filter(e => {
+                    const eDate = new Date(e.date);
+                    return eDate.getMonth() === currentMonth && eDate.getFullYear() === currentYear;
+                });
+                
+                const emotionCounts = monthlyEmotions.reduce((acc, e) => {
+                    const emotionName = e.emotion.split(' ')[1]; // 'Happy', 'Sad', etc.
+                    acc[emotionName] = (acc[emotionName] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const labels = Object.keys(emotionCounts);
+                const data = Object.values(emotionCounts);
+
+                if (emotionChartInstance) {
+                    emotionChartInstance.destroy();
+                }
+
+                if (labels.length === 0) {
+                    // No data, don't render chart
+                    return;
+                }
+
+                emotionChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Emotion Count',
+                            data: data,
+                            backgroundColor: [
+                                'rgba(255, 205, 86, 0.5)', // Yellow (Happy/Excited)
+                                'rgba(54, 162, 235, 0.5)', // Blue (Sad/Calm)
+                                'rgba(255, 99, 132, 0.5)', // Red (Angry/Stressed)
+                                'rgba(75, 192, 192, 0.5)', // Green
+                                'rgba(153, 102, 255, 0.5)', // Purple
+                                'rgba(255, 159, 64, 0.5)' // Orange
+                            ],
+                            borderColor: [
+                                'rgb(255, 205, 86)',
+                                'rgb(54, 162, 235)',
+                                'rgb(255, 99, 132)',
+                                'rgb(75, 192, 192)',
+                                'rgb(153, 102, 255)',
+                                'rgb(255, 159, 64)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        }
+                    }
+                });
+            }
+
+            // --- People (Updated) ---
+            const peopleList = document.getElementById('people-list');
+            function renderPeople() {
+                if (appData.people.length === 0) {
+                    peopleList.innerHTML = '<p class="text-gray-500 text-center py-10 md:col-span-2">No people added yet.</p>';
+                    return;
+                }
+
+                peopleList.innerHTML = appData.people.map((person) => `
+                    <div class="bg-white rounded-xl shadow-lg p-5 transform transition-transform duration-300 hover:scale-105 hover:shadow-xl">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-lg font-bold text-indigo-700 flex items-center space-x-2">
+                                <span class="text-2xl">${person.emoji || '👤'}</span>
+                                <span>${person.name}</span>
+                            </h3>
+                            <button class="delete-person-btn text-red-400 hover:text-red-600" data-id="${person.id}">&times;</button>
+                        </div>
+                        <p class="text-sm font-medium text-gray-600 bg-gray-100 px-2 py-1 rounded-full inline-block mb-3">${person.context}</p>
+                        <div class="flex flex-wrap gap-1 mb-3">
+                            ${(person.tags || '').split(',').filter(t => t.trim() !== '').map(tag => `
+                                <span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">${tag.trim()}</span>
+                            `).join('')}
+                        </div>
+                        <p class="text-gray-700 text-sm whitespace-pre-wrap">${person.notes}</p>
+                    </div>
+                `).join('');
+            }
+
+            // --- Conversations (Updated) ---
+            const convoPersonSelect = document.getElementById('convo-person');
+            function updatePeopleDropdown() {
+                convoPersonSelect.innerHTML = '<option value="">Select a person</option>'; // Reset
+                appData.people.forEach(person => {
+                    convoPersonSelect.innerHTML += `<option value="${person.id}">${person.name}</option>`;
+                });
+            }
+
+            const convoList = document.getElementById('convo-list');
+            function renderConversations() {
+                appData.conversations.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                if (appData.conversations.length === 0) {
+                    convoList.innerHTML = '<p class="text-gray-500 text-center py-10">No conversations logged yet.</p>';
+                    return;
+                }
+
+                convoList.innerHTML = appData.conversations.map((convo) => {
+                    const person = appData.people.find(p => p.id === convo.personId);
+                    const personName = person ? person.name : 'Deleted Person';
+
+                    return `
+                        <div class="bg-white rounded-xl shadow-md p-5">
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-800">With <span class="text-indigo-600 font-bold">${personName}</span></h3>
+                                    <p class="text-sm text-gray-500">${new Date(convo.date + 'T00:00').toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                </div>
+                                <button class="delete-convo-btn text-red-400 hover:text-red-600" data-date="${convo.date}" data-personid="${convo.personId}">&times;</button>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <h4 class="font-semibold text-gray-700">Summary:</h4>
+                                    <p class="text-gray-600 text-sm whitespace-pre-wrap">${convo.summary}</p>
+                                </div>
+                                ${convo.takeaways ? `
+                                <div>
+                                    <h4 class="font-semibold text-gray-700">Takeaways:</h4>
+                                    <p class="text-gray-600 text-sm whitespace-pre-wrap">${convo.takeaways}</p>
+                                </div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+
+            // === EVENT LISTENERS FOR FORMS ===
+
+            // --- Academics ---
+            const courseForm = document.getElementById('course-form');
+            if (courseForm) { 
+                courseForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const newCourse = {
+                        id: `c_${Date.now()}`,
+                        name: document.getElementById('course-name').value,
+                        prof: document.getElementById('course-prof').value,
+                        room: document.getElementById('course-room').value,
+                        attended: 0,
+                        bunked: 0
+                    };
+                    appData.academics.courses.push(newCourse);
+                    await saveData(); // SYNC
+                    renderAcademicsCourses();
+                    updateDashboardStats();
+                    e.target.reset();
+                    showNotification('Course added!');
+                });
+            }
+            
+            const assignmentForm = document.getElementById('assignment-form');
+            if (assignmentForm) { 
+                assignmentForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const newAssignment = {
+                        id: `a_${Date.now()}`,
+                        title: document.getElementById('assignment-title').value,
+                        courseId: document.getElementById('assignment-course').value,
+                        dueDate: document.getElementById('assignment-due-date').value,
+                        done: false
+                    };
+                    appData.academics.assignments.push(newAssignment);
+                    await saveData(); // SYNC
+                    renderAcademicsAssignments();
+                    renderDashboard(); // Update deadlines
+                    e.target.reset();
+                    showNotification('Assignment added!');
+                });
+            }
+            
+            const timetableForm = document.getElementById('timetable-form');
+            if (timetableForm) { 
+                timetableForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const courseId = document.getElementById('timetable-course').value;
+                    const day = document.getElementById('timetable-day').value;
+                    const time = document.getElementById('timetable-time').value;
+                    const slotKey = `${day}_${time}`;
+                    
+                    appData.academics.timetable[slotKey] = courseId;
+                    await saveData(); // SYNC
+                    renderAcademicsTimetable();
+                    renderDashboard(); // Update today's classes
+                    showNotification('Class added to timetable!');
+                });
+            }
+            
+            // --- Expenses ---
+            const expenseForm = document.getElementById('expense-form');
+            if (expenseForm) { 
+                expenseForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const newExpense = {
+                        id: `e_${Date.now()}`,
+                        date: document.getElementById('expense-date').value,
+                        item: document.getElementById('expense-item').value,
+                        amount: parseFloat(document.getElementById('expense-amount').value),
+                        category: document.getElementById('expense-category').value
+                    };
+                    appData.expenses.push(newExpense);
+                    await saveData(); // SYNC
+                    renderExpenses();
+                    renderExpenseChart();
+                    updateDashboardStats();
+                    e.target.reset();
+                    document.getElementById('expense-date').value = getTodayDate();
+                    showNotification('Expense logged!');
+                });
+            }
+
+            // --- Diary ---
+            document.getElementById('diary-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                appData.diary.push({
+                    date: document.getElementById('diary-date').value,
+                    title: document.getElementById('diary-title').value,
+                    mood: document.getElementById('diary-mood').value,
+                    content: document.getElementById('diary-content').value,
+                });
+                await saveData(); // SYNC
+                renderDiary();
+                updateDashboardStats();
+                e.target.reset();
+                document.getElementById('diary-date').value = getTodayDate();
+                showNotification('Diary entry saved!');
+            });
+            
+            // Diary Search
+            diarySearch.addEventListener('keyup', (e) => {
+                renderDiary(e.target.value);
+            });
+
+            // --- Emotions ---
+            const emotionPicker = document.getElementById('emotion-picker');
+            const selectedEmotionInput = document.getElementById('emotion-selected');
+            emotionPicker.addEventListener('click', (e) => {
+                const btn = e.target.closest('.emotion-btn');
+                if (!btn) return;
+                emotionPicker.querySelectorAll('.emotion-btn').forEach(b => {
+                    b.classList.remove('border-indigo-500', 'scale-125', 'bg-indigo-100');
+                });
+                btn.classList.add('border-indigo-500', 'scale-125', 'bg-indigo-100');
+                selectedEmotionInput.value = btn.dataset.emotion;
+            });
+
+            document.getElementById('emotion-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!selectedEmotionInput.value) {
+                    showNotification('Please select an emotion!', false);
+                    return;
+                }
+                appData.emotions.push({
+                    date: document.getElementById('emotion-date').value,
+                    emotion: selectedEmotionInput.value,
+                    trigger: document.getElementById('emotion-trigger').value,
+                });
+                await saveData(); // SYNC
+                renderEmotions();
+                renderEmotionChart();
+                renderDashboard(); // Update last emotion
+                updateDashboardStats();
+                e.target.reset();
+                selectedEmotionInput.value = '';
+                emotionPicker.querySelectorAll('.emotion-btn').forEach(b => {
+                    b.classList.remove('border-indigo-500', 'scale-125', 'bg-indigo-100');
+                });
+                document.getElementById('emotion-date').value = getNowDateTimeLocal();
+                showNotification('Emotion logged!');
+            });
+
+            // --- People ---
+            document.getElementById('people-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                appData.people.push({
+                    id: `person_${Date.now()}`,
+                    name: document.getElementById('person-name').value,
+                    emoji: document.getElementById('person-emoji').value || '👤',
+                    context: document.getElementById('person-context').value,
+                    tags: document.getElementById('person-tags').value,
+                    notes: document.getElementById('person-notes').value,
+                });
+                await saveData(); // SYNC
+                renderPeople();
+                updatePeopleDropdown();
+                updateDashboardStats();
+                e.target.reset();
+                showNotification('Person added!');
+            });
+
+            // --- Conversations ---
+            document.getElementById('convo-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                appData.conversations.push({
+                    date: document.getElementById('convo-date').value,
+                    personId: document.getElementById('convo-person').value,
+                    summary: document.getElementById('convo-summary').value,
+                    takeaways: document.getElementById('convo-takeaways').value,
+                });
+                await saveData(); // SYNC
+                renderConversations();
+                updateDashboardStats();
+                e.target.reset();
+                document.getElementById('convo-date').value = getTodayDate();
+                showNotification('Conversation logged!');
+            });
+
+            // === EVENT LISTENERS FOR DELETING & ACTIONS (Event Delegation) ===
+            
+            // --- Academics ---
+            if (courseList) { 
+                courseList.addEventListener('click', async (e) => {
+                    const courseId = e.target.dataset.id;
+                    if (!courseId) return;
+                    const course = getCourse(courseId);
+                    
+                    if (e.target.classList.contains('attend-btn')) {
+                        course.attended++;
+                        await saveData(); // SYNC
+                        renderAcademicsCourses();
+                    } else if (e.target.classList.contains('bunk-btn')) {
+                        course.bunked++;
+                        await saveData(); // SYNC
+                        renderAcademicsCourses();
+                    } else if (e.target.classList.contains('delete-course-btn')) {
+                        // Use a custom modal/notification instead of confirm
+                        showNotification(`Deleting ${course.name}...`, false);
+                        appData.academics.courses = appData.academics.courses.filter(c => c.id !== courseId);
+                        appData.academics.assignments = appData.academics.assignments.filter(a => a.courseId !== courseId);
+                        Object.keys(appData.academics.timetable).forEach(key => {
+                            if (appData.academics.timetable[key] === courseId) {
+                                delete appData.academics.timetable[key];
+                            }
+                        });
+                        await saveData(); // SYNC
+                        renderAll();
+                        showNotification('Course deleted.', false);
+                    }
+                });
+            }
+            
+            if (assignmentList) { 
+                assignmentList.addEventListener('click', async (e) => {
+                    const assignmentId = e.target.dataset.id;
+                    if (!assignmentId) return;
+                    const assignment = appData.academics.assignments.find(a => a.id === assignmentId);
+                    
+                    if (e.target.classList.contains('assignment-done-btn')) {
+                        assignment.done = e.target.checked;
+                        await saveData(); // SYNC
+                        renderAcademicsAssignments();
+                        renderDashboard(); // Update deadlines
+                    } else if (e.target.classList.contains('delete-assignment-btn')) {
+                        appData.academics.assignments = appData.academics.assignments.filter(a => a.id !== assignmentId);
+                        await saveData(); // SYNC
+                        renderAcademicsAssignments();
+                        renderDashboard(); // Update deadlines
+                        showNotification('Assignment deleted.', false);
+                    }
+                });
+            }
+            
+            if (timetableVisual) { 
+                timetableVisual.addEventListener('click', async (e) => {
+                    if (e.target.classList.contains('delete-timetable-btn')) {
+                        const slotKey = e.target.dataset.key;
+                        delete appData.academics.timetable[slotKey];
+                        await saveData(); // SYNC
+                        renderAcademicsTimetable();
+                        renderDashboard(); // Update today's classes
+                        showNotification('Class removed from timetable.', false);
+                    }
+                });
+            }
+            
+            // --- Expenses ---
+            if (expenseList) { 
+                expenseList.addEventListener('click', async (e) => {
+                    const btn = e.target.closest('.delete-expense-btn');
+                    if (btn) {
+                        const id = btn.dataset.id;
+                        appData.expenses = appData.expenses.filter(ex => ex.id !== id);
+                        await saveData(); // SYNC
+                        renderExpenses();
+                        renderExpenseChart();
+                        updateDashboardStats();
+                        showNotification('Expense deleted.', false);
+                    }
+                });
+            }
+
+            // --- Diary ---
+            diaryList.addEventListener('click', async (e) => {
+                if (e.target.classList.contains('delete-diary-btn')) {
+                    const date = e.target.dataset.date;
+                    const title = e.target.dataset.title;
+                    appData.diary = appData.diary.filter(entry => entry.date !== date || entry.title !== title);
+                    await saveData(); // SYNC
+                    renderDiary(diarySearch.value);
+                    updateDashboardStats();
+                    showNotification('Diary entry deleted.', false);
+                }
+            });
+
+            // --- Emotions ---
+            emotionList.addEventListener('click', async (e) => {
+                const btn = e.target.closest('.delete-emotion-btn');
+                if (btn) {
+                    const date = btn.dataset.date;
+                    appData.emotions = appData.emotions.filter(entry => entry.date !== date);
+                    await saveData(); // SYNC
+                    renderEmotions();
+                    renderEmotionChart();
+                    renderDashboard(); // Update last emotion
+                    updateDashboardStats();
+                    showNotification('Emotion log deleted.', false);
+                }
+            });
+
+            // --- People ---
+            peopleList.addEventListener('click', async (e) => {
+                const btn = e.target.closest('.delete-person-btn');
+                if (btn) {
+                    const id = btn.dataset.id;
+                    appData.people = appData.people.filter(person => person.id !== id);
+                    // Conversations will just show "Deleted Person"
+                    await saveData(); // SYNC
+                    renderPeople();
+                    updatePeopleDropdown();
+                    renderConversations();
+                    updateDashboardStats();
+                    showNotification('Person deleted.', false);
+                }
+            });
+
+            // --- Conversations ---
+            convoList.addEventListener('click', async (e) => {
+                const btn = e.target.closest('.delete-convo-btn');
+                if (btn) {
+                    const date = btn.dataset.date;
+                    const personId = btn.dataset.personid;
+                    appData.conversations = appData.conversations.filter(c => c.date !== date || c.personId !== personId);
+                    await saveData(); // SYNC
+                    renderConversations();
+                    updateDashboardStats();
+                    showNotification('Conversation deleted.', false);
+                }
+            });
+
+            // === INITIALIZATION ===
+            // This just sets default dates, the main init logic is in the onAuthStateChanged
+            function initDOM() {
+                // Set default dates
+                document.getElementById('diary-date').value = getTodayDate();
+                
+                const expenseDateEl = document.getElementById('expense-date');
+                if (expenseDateEl) expenseDateEl.value = getTodayDate();
+                
+                const assignmentDateEl = document.getElementById('assignment-due-date');
+                if (assignmentDateEl) assignmentDateEl.value = getTodayDate();
+
+                document.getElementById('emotion-date').value = getNowDateTimeLocal();
+                document.getElementById('convo-date').value = getTodayDate();
+                document.getElementById('summary-date').value = getTodayDate(); // Set default for summary
+            }
+
+            // Note: renderAll() and initDOM() are now called from the onSnapshot listener
+            // when data is first loaded.
+        });
+    </script>
+
+</body>
+</html>
